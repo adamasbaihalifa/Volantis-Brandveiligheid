@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 from io import BytesIO
 import base64
 import re
@@ -12,7 +13,6 @@ custom_colors = ['#D0DFE6', '#FBCDAB', '#EC6907', '#A6CEE3', '#B2DF8A',
                  '#FDBF6F', '#CAB2D6', '#FF7F00', '#FB9A99']
 
 def add_logo(image_path):
-    """Voeg een logo toe aan de Streamlit app."""
     with open(image_path, "rb") as file:
         contents = file.read()
         encoded_image = base64.b64encode(contents).decode()
@@ -26,7 +26,6 @@ def add_logo(image_path):
     )
 
 def transform_data(input_data):
-    """Transformeert de Excel data voor verwerking."""
     input_data.columns = input_data.iloc[0]
     input_data = input_data.drop(input_data.index[0])
     transposed = input_data.T.reset_index()
@@ -70,27 +69,11 @@ def transform_data(input_data):
     return pd.DataFrame(processed_rows)
 
 def create_risk_matrix(df):
-    """Maakt de Tolerantie-Risico matrix."""
-    kans_labels = {
-        1: "1 - zeer onwaarschijnlijk",
-        2: "2 - onwaarschijnlijk",
-        3: "3 - mogelijk",
-        4: "4 - waarschijnlijk",
-        5: "5 - zeer waarschijnlijk"
-    }
-    
-    effect_labels = {
-        1: "1 - klein",
-        2: "2 - matig",
-        3: "3 - hevig",
-        4: "4 - ernstig",
-        5: "5 - rampzalig"
-    }
-    
+    matrix_labels = ['1', '2', '4', '5']
     matrix = pd.DataFrame(
         0, 
-        index=pd.Categorical(list(kans_labels.values()), categories=list(kans_labels.values())),
-        columns=pd.Categorical(list(effect_labels.values()), categories=list(effect_labels.values()))
+        index=pd.Categorical(matrix_labels, categories=matrix_labels),
+        columns=pd.Categorical(matrix_labels, categories=matrix_labels)
     )
     
     def extract_number(value):
@@ -100,28 +83,38 @@ def create_risk_matrix(df):
     for _, row in df.iterrows():
         kans = extract_number(row['Kans'])
         effect = extract_number(row['Effect'])
-        if kans in kans_labels and effect in effect_labels:
-            matrix.loc[kans_labels[kans], effect_labels[effect]] += 1
+        if kans in [1,2,4,5] and effect in [1,2,4,5]:
+            matrix.loc[str(kans), str(effect)] += 1
     
     return matrix
 
+def create_risk_categories(df):
+    bins = [-1, 5, 6, 9, 25]
+    labels = ['Safe (0-5)', 'Low (6)', 'Medium (7-9)', 'High (10-25)']
+    df['Category'] = pd.cut(df['Risico'], bins=bins, labels=labels)
+    return df['Category'].value_counts().reindex(labels, fill_value=0)
+
 def add_matrix_sheet(writer, matrix):
-    """Voeg matrix worksheet toe met opmaak."""
     workbook = writer.book
-    worksheet = workbook.add_worksheet('Tolerantie Matrix')
+    worksheet = workbook.add_worksheet('Risk Matrix')
     
-    # Header
-    worksheet.write(0, 0, "Tolerantie - Risico Matrix")
+    # Write header
+    worksheet.write(0, 0, "Kans →\Effect ↓")
     for col_idx, value in enumerate(matrix.columns, start=1):
         worksheet.write(0, col_idx, value)
     
-    # Data
-    for row_idx, (index, row) in enumerate(matrix.iterrows(), start=1):
-        worksheet.write(row_idx, 0, index)
-        for col_idx, value in enumerate(row, start=1):
-            worksheet.write(row_idx, col_idx, value)
+    # Write index
+    for row_idx, value in enumerate(matrix.index, start=1):
+        worksheet.write(row_idx, 0, value)
     
-    # Opmaak
+    # Write data with product values
+    for row_idx, row in enumerate(matrix.index, start=1):
+        for col_idx, col in enumerate(matrix.columns, start=1):
+            product = int(row) * int(col)
+            count = matrix.loc[row, col]
+            worksheet.write(row_idx, col_idx, f"{product} ({count})")
+    
+    # Conditional formatting
     max_val = matrix.max().max()
     for row in range(1, len(matrix)+1):
         for col in range(1, len(matrix.columns)+1):
@@ -136,163 +129,105 @@ def add_matrix_sheet(writer, matrix):
                 }
             )
 
-def add_barchart_sheet(writer, df):
-    """Voeg risico bar chart toe."""
+def add_risk_categories_sheet(writer, categories):
     workbook = writer.book
-    worksheet = workbook.add_worksheet('Top Risicos')
+    worksheet = workbook.add_worksheet('Risk Categories')
     
-    # Filter en sorteer
-    filtered = df[df['Risico'] > 0].sort_values('Risico', ascending=False)
+    # Write data
+    worksheet.write(0, 0, 'Category')
+    worksheet.write(0, 1, 'Count')
     
-    # Schrijf data
-    filtered[['kenmerken', 'Risico']].to_excel(
-        writer, 
-        sheet_name='Top Risicos', 
-        startrow=1, 
-        index=False
-    )
+    for row_idx, (category, count) in enumerate(categories.items(), start=1):
+        worksheet.write(row_idx, 0, category)
+        worksheet.write(row_idx, 1, count)
     
-    # Maak chart
-    chart = workbook.add_chart({'type': 'bar'})
+    # Create pie chart
+    chart = workbook.add_chart({'type': 'pie'})
     chart.add_series({
-        'categories': ['Top Risicos', 1, 0, len(filtered), 0],
-        'values':     ['Top Risicos', 1, 1, len(filtered), 1],
-        'fill':       {'color': '#EC6907'},
-        'name':       'Risico Score'
+        'name': 'Risk Categories',
+        'categories': ['Risk Categories', 1, 0, len(categories), 0],
+        'values':     ['Risk Categories', 1, 1, len(categories), 1],
+        'points': [
+            {'fill': {'color': '#B2DF8A'}},  # Safe
+            {'fill': {'color': '#FDBF6F'}},  # Low
+            {'fill': {'color': '#EC6907'}},  # Medium
+            {'fill': {'color': '#C00000'}},  # High
+        ]
     })
     
-    # Chart instellingen
-    chart.set_title({'name': 'Meest Risicovolle Kenmerken'})
-    chart.set_x_axis({'name': 'Kenmerk', 'label_position': 'low'})
-    chart.set_y_axis({'name': 'Risico Score'})
-    chart.set_legend({'position': 'none'})
-    chart.set_style(11)
-    
+    chart.set_title({'name': 'Risk Category Distribution'})
     worksheet.insert_chart('D2', chart)
-
-def style_excel(writer, df):
-    """Opmaak voor de hoofdsheet."""
-    workbook = writer.book
-    worksheet = writer.sheets['Resultaat']
-    colors = iter(custom_colors)
-    border_format = workbook.add_format({'border': 1})
-    current_color = next(colors)
-    previous_field = None
-    
-    for row_idx, field_value in enumerate(df['kenmerken'], start=1):
-        if field_value != previous_field:
-            current_color = next(colors, custom_colors[0])
-            previous_field = field_value
-        
-        for col_idx in range(df.shape[1]):
-            cell_value = df.iloc[row_idx - 1, col_idx]
-            if pd.isna(cell_value):
-                cell_value = ""
-            cell_format = workbook.add_format({
-                'bg_color': current_color, 
-                'border': 1, 
-                'font_color': '#000000'
-            })
-            worksheet.write(row_idx, col_idx, cell_value, cell_format)
-    
-    worksheet.conditional_format(
-        0, 0, df.shape[0], df.shape[1] - 1, 
-        {'type': 'no_blanks', 'format': border_format}
-    )
 
 def main():
     add_logo("bcc_volantis-logo_cmyk.jpg")
-    st.title("Volantis: Excel Transformatie App")
-    uploaded_file = st.file_uploader("Kies een Excel-bestand", type=["xlsx", "xls"])
+    st.title("Volantis: Advanced Risk Analysis")
+    uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx", "xls"])
     
     if uploaded_file:
         try:
-            # Sectie 1: Raw data
-            st.subheader("1. Originele Data")
             raw_df = pd.read_excel(uploaded_file, header=None)
-            with st.expander("Toon volledige dataset"):
-                st.dataframe(raw_df)
-            
-            # Sectie 2: Dataverwerking
-            st.subheader("2. Dataverwerking")
-            start_row = raw_df[
-                raw_df.apply(lambda row: row.astype(str).str.contains("Omgevingskenmerken - Algemeen").any(), axis=1)
-            ].index
+            start_row = raw_df[raw_df.apply(lambda row: row.astype(str).str.contains("Omgevingskenmerken - Algemeen").any(), axis=1)].index
             
             if not start_row.empty:
                 processed_df = raw_df.iloc[start_row[0]:].copy()
-                with st.expander("Toon verwerkte input"):
-                    st.dataframe(processed_df)
-            else:
-                st.error("Startrij niet gevonden")
-                return
+                transformed_df = transform_data(processed_df)
                 
-            # Sectie 3: Getransformeerde data
-            st.subheader("3. Resultaat")
-            transformed_df = transform_data(processed_df)
-            st.dataframe(transformed_df)
-            
-            # Sectie 4: Visualisaties
-            st.subheader("4. Risico Analyse")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Risico matrix
-                risk_matrix = create_risk_matrix(transformed_df)
-                st.write("**Tolerantie Matrix**")
-                fig, ax = plt.subplots(figsize=(8, 5))
-                sns.heatmap(
-                    risk_matrix.astype(int), 
-                    annot=True, 
-                    fmt="d", 
-                    cmap="YlOrRd", 
-                    linewidths=.5,
-                    ax=ax
-                )
-                ax.set_xlabel("Effect")
-                ax.set_ylabel("Kans")
-                st.pyplot(fig)
-            
-            with col2:
-                # Bar chart
-                st.write("**Risico Verdeling**")
-                filtered = transformed_df[transformed_df['Risico'] > 0]
-                if not filtered.empty:
-                    fig2, ax2 = plt.subplots(figsize=(8, 5))
-                    sns.barplot(
-                        data=filtered.sort_values('Risico', ascending=False),
-                        y='kenmerken',
-                        x='Risico',
-                        palette="YlOrRd",
+                st.subheader("Processed Data")
+                st.dataframe(transformed_df)
+                
+                st.subheader("Risk Analysis")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write("**Risk Matrix**")
+                    risk_matrix = create_risk_matrix(transformed_df)
+                    fig, ax = plt.subplots(figsize=(8, 6))
+                    sns.heatmap(
+                        risk_matrix.astype(int), 
+                        annot=True, 
+                        fmt="d",
+                        cmap="YlOrRd",
+                        linewidths=.5,
+                        linecolor='white',
+                        ax=ax
+                    )
+                    ax.set_xlabel("Effect", fontsize=12)
+                    ax.set_ylabel("Kans", fontsize=12)
+                    st.pyplot(fig)
+                
+                with col2:
+                    st.write("**Risk Categories**")
+                    categories = create_risk_categories(transformed_df)
+                    fig2, ax2 = plt.subplots(figsize=(8, 6))
+                    categories.plot(
+                        kind='barh', 
+                        color=['#B2DF8A','#FDBF6F','#EC6907','#C00000'],
                         ax=ax2
                     )
-                    ax2.set_xlabel("Risico Score")
+                    ax2.set_xlabel("Count", fontsize=12)
                     ax2.set_ylabel("")
-                    plt.tight_layout()
+                    plt.xticks(rotation=45)
                     st.pyplot(fig2)
-                else:
-                    st.info("Geen risico's gevonden")
+                
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                    transformed_df.to_excel(writer, index=False, sheet_name="Raw Data")
+                    add_matrix_sheet(writer, risk_matrix)
+                    add_risk_categories_sheet(writer, categories)
+                
+                st.download_button(
+                    label="Download Full Report",
+                    data=output.getvalue(),
+                    file_name="risk_analysis.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
             
-            # Sectie 5: Download
-            st.subheader("5. Download Rapport")
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                transformed_df.to_excel(writer, index=False, sheet_name="Resultaat")
-                style_excel(writer, transformed_df)
-                add_matrix_sheet(writer, risk_matrix)
-                add_barchart_sheet(writer, transformed_df)
-            
-            st.download_button(
-                label="📥 Download Excel Rapport",
-                data=output.getvalue(),
-                file_name="risico_analyse.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                help="Klik om het volledige rapport te downloaden"
-            )
-            
+            else:
+                st.error("Starting row not found in the document")
+                
         except Exception as e:
-            st.error(f"Fout opgetreden: {str(e)}")
+            st.error(f"Error: {str(e)}")
 
 if __name__ == "__main__":
     main()
