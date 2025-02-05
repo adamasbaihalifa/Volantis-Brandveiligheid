@@ -100,7 +100,8 @@ def add_matrix_sheet(writer, matrix):
     worksheet = workbook.add_worksheet('Risk Matrix')
     
     # Write header
-    worksheet.write(0, 0, "Kans →\Effect ↓")
+    worksheet.write(0, 0, "Kans →\\Effect ↓")
+
     for col_idx, value in enumerate(matrix.columns, start=1):
         worksheet.write(0, col_idx, value)
     
