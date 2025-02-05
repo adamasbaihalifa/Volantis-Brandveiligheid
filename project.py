@@ -7,6 +7,7 @@ import re
 from xlsxwriter.utility import xl_rowcol_to_cell
 import matplotlib.pyplot as plt
 import seaborn as sns
+import xlsxwriter
 
 # Custom colors
 custom_colors = ['#D0DFE6', '#FBCDAB', '#EC6907', '#A6CEE3', '#B2DF8A', 
