@@ -384,22 +384,22 @@ def hoofd():
         except Exception as e:
             st.error(f"Fout opgetreden: {str(e)}")
 
-    def genereer_pdf():
-        pdf = FPDF()
-        pdf.set_auto_page_break(auto=True, margin=15)
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        pdf.set_title("test")
-        pdf.cell(200, 10, "Risicoanalyse Rapport", ln=True, align="C")
-        pdf.ln(10)
+    # def genereer_pdf():
+    #     pdf = FPDF()
+    #     pdf.set_auto_page_break(auto=True, margin=15)
+    #     pdf.add_page()
+    #     pdf.set_font("Arial", size=12)
+    #     pdf.set_title("test")
+    #     pdf.cell(200, 10, "Risicoanalyse Rapport", ln=True, align="C")
+    #     pdf.ln(10)
         
-        for index, row in top_10_risico.iterrows():
-            pdf.cell(200, 10, f"{row['Risico']}: {row['kenmerken']}", ln=True)
+    #     for index, row in top_10_risico.iterrows():
+    #         pdf.cell(200, 10, f"{row['Risico']}: {row['kenmerken']}", ln=True)
         
-        # Return PDF bytes directly
-        return pdf.output(dest='S')
+    #     # Return PDF bytes directly
+    #     return pdf.output(dest='S')
 
-    st.download_button("📄 Download PDF-rapport", data=genereer_pdf(), file_name="Risicoanalyse.pdf", mime="application/pdf")
+    # st.download_button("📄 Download PDF-rapport", data=genereer_pdf(), file_name="Risicoanalyse.pdf", mime="application/pdf")
 
 if __name__ == "__main__":
     hoofd()
