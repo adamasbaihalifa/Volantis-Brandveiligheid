@@ -39,7 +39,7 @@ categorie_palet = {
 def voeg_logo_toe(afbeeldingspad):
     with open(afbeeldingspad, "rb") as bestand:
         inhoud = bestand.read()
-        gecodeerde_afbeelding = base64.b64encode(inhoud).decode('latin-1')
+        gecodeerde_afbeelding = base64.b64encode(inhoud).decode()
     st.markdown(
         f"""
         <div style="text-align: center;">
@@ -360,7 +360,7 @@ def maak_dynamische_matrix_afbeelding(matrix: pd.DataFrame) -> str:
         (1,5): "#00FF00",
     }
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(8, 6))
     data = matrix.values
     row_labels = matrix.index
     col_labels = matrix.columns
@@ -407,13 +407,8 @@ def maak_dynamische_matrix_afbeelding(matrix: pd.DataFrame) -> str:
 
     # Adjust layout
     ax.axis('off')
-    plt.subplots_adjust(
-        left=0.15,   # Reduced from default ~0.125
-        right=0.85,  # Reduced from default ~0.9
-        top=0.9,     # Reduced from default ~0.9
-        bottom=0.15  # Reduced from default ~0.1
-    )    
     plt.tight_layout()
+    plt.subplots_adjust(left=0.15, right=0.95, top=0.85, bottom=0.15)
     
 
     # Save image
@@ -421,7 +416,7 @@ def maak_dynamische_matrix_afbeelding(matrix: pd.DataFrame) -> str:
     plt.savefig(
         tmpfile.name, 
         bbox_inches='tight',
-        pad_inches=0.01,  # Reduced from default 0.1
+        pad_inches=0.05,  # Reduced from default 0.1
         dpi=300
     )    
     plt.close(fig)
@@ -780,32 +775,16 @@ def hoofd():
                 # ----------------------------------------------------------
 
                 # ---- Links: Dynamische risicomatrix ----                    
-                # with kol_links:
-
-                #     st.write("**Dynamische Risicomatrix**")
-                #     risicomatrix = maak_risicomatrix(getransformeerde_df)
-                #     dyn_img_path = maak_dynamische_matrix_afbeelding(risicomatrix)
-                    
-                #     # Add a container with constrained height
-                #     # with st.container(height=400):  # Adjust height as needed
-                #     st.image(dyn_img_path, use_container_width=True)
                 with kol_links:
+
                     st.write("**Dynamische Risicomatrix**")
                     risicomatrix = maak_risicomatrix(getransformeerde_df)
                     dyn_img_path = maak_dynamische_matrix_afbeelding(risicomatrix)
                     
-                    # Read image as bytes and encode properly
-                    with open(dyn_img_path, "rb") as img_file:
-                        img_bytes = img_file.read()
-                        encoded_img = base64.b64encode(img_bytes).decode('latin-1')  # Encode bytes to base64 bytes, then decode to string
-                    
-                    # Display with centered HTML
-                    st.markdown(
-                        f'<div style="display: flex; justify-content: center;">'
-                        f'<img src="data:image/png;base64,{encoded_img}" style="width: 70%;">'
-                        f'</div>',
-                        unsafe_allow_html=True
-                    )
+                    # Add a container with constrained height
+                    # with st.container(height=400):  # Adjust height as needed
+                    st.image(dyn_img_path, use_container_width=True)
+
                     
                     # Tolerantie
                     st.write("**Tolerantie - Risico Analyse**")
