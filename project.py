@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import tempfile
 from xlsxwriter.utility import xl_rowcol_to_cell
+import math
 
 ################################################################################
 # Streamlit Config en Kleuren
@@ -38,7 +39,7 @@ categorie_palet = {
 def voeg_logo_toe(afbeeldingspad):
     with open(afbeeldingspad, "rb") as bestand:
         inhoud = bestand.read()
-        gecodeerde_afbeelding = base64.b64encode(inhoud).decode()
+        gecodeerde_afbeelding = base64.b64encode(inhoud).decode('latin-1')
     st.markdown(
         f"""
         <div style="text-align: center;">
@@ -132,11 +133,11 @@ def maak_risicomatrix(df):
     ]
     
     x_labels = [
-        'Zeer onwaarschijnlijk (5)',
-        'Onwaarschijnlijk (4)',
-        'Mogelijk (3)',
+        'Zeer waarschijnlijk (1)',
         'Waarschijnlijk (2)',
-        'Zeer waarschijnlijk (1)'
+        'Mogelijk (3)',
+        'Onwaarschijnlijk (4)',
+        'Zeer onwaarschijnlijk (5)'
     ]
 
     matrix = pd.DataFrame(
@@ -154,27 +155,277 @@ def maak_risicomatrix(df):
     
     return matrix
 
-################################################################################
-# STATISCHE TOLERANTIEMATRIX
-# (zoals in je screenshot: 5 x 5, met waarde = product(impact,kans))
-################################################################################
-def maak_statische_tolerantiematrix():
-    impact_labels = ["Rampzalig (5)", "Ernstig (4)", "Hevig (3)", "Matig (2)", "Klein (1)"]
-    kans_labels = ["Zeer onwaarschijnlijk", "Onwaarschijnlijk", "Mogelijk", "Waarschijnlijk", "Zeer waarschijnlijk"]
+def maak_dynamische_matrix_kleur(risicomatrix: pd.DataFrame) -> str:
+    """
+    Maakt een PNG van 'risicomatrix' (5x5), met de vaste kleurtoewijzing 
+    uit je color_map. Retourneert het pad van de PNG.
+    """
+    # Bepaal (Effect, Kans) uit de index/kolommen. 
+    # Let op je labeling: 
+    #   - Index: 'Zeer groot (5)', 'Groot (4)', etc. => effect=5,4,3,2,1
+    #   - Kolommen: 'Zeer waarschijnlijk (1)', etc. => kans=1..5.
+    def get_num_from_label(lbl):
+        match = re.search(r"\((\d+)\)", str(lbl))
+        return int(match.group(1)) if match else None
 
-    impact_map = {"Rampzalig (5)":5, "Ernstig (4)":4, "Hevig (3)":3, "Matig (2)":2, "Klein (1)":1}
-    kans_map = {"Zeer onwaarschijnlijk":1, "Onwaarschijnlijk":2, "Mogelijk":3, "Waarschijnlijk":4, "Zeer waarschijnlijk":5}
+    # Jouw vaste mapping:
+    color_map = {
+        (5,1): "green",  (5,2): "red",    (5,3): "red",    (5,4): "red",    (5,5): "red",
+        (4,1): "green",  (4,2): "yellow", (4,3): "red",    (4,4): "red",    (4,5): "red",
+        (3,1): "green",  (3,2): "yellow",(3,3): "yellow", (3,4): "red",    (3,5): "red",
+        (2,1): "green",  (2,2): "green", (2,3): "yellow", (2,4): "yellow", (2,5): "red",
+        (1,1): "green",  (1,2): "green", (1,3): "green",  (1,4): "green",  (1,5): "green",
+    }
 
-    matrix_data = []
-    for imp_label in impact_labels:
-        row_vals = []
-        for kan_label in kans_labels:
-            product = impact_map[imp_label] * kans_map[kan_label]
-            row_vals.append(product)
-        matrix_data.append(row_vals)
+    fig, ax = plt.subplots(figsize=(6,4))
+    cell_text = []
+    cell_colors = []
+    for row_label in risicomatrix.index:
+        e_val = get_num_from_label(row_label)  # effect
+        row_txt = []
+        row_clr = []
+        for col_label in risicomatrix.columns:
+            k_val = get_num_from_label(col_label)  # kans
+            cell_value = risicomatrix.loc[row_label, col_label]
+            row_txt.append(str(cell_value))
+            # Bepaal de kleur
+            base_color = color_map.get((e_val, k_val), "white")
+            if cell_value == 0:
+                # als '0', kun je het bv. grijs maken, net zoals bij je statische matrix
+                row_clr.append((0.9, 0.9, 0.9)) 
+            else:
+                if base_color == "red":
+                    row_clr.append((1, 0, 0))       # rood
+                elif base_color == "yellow":
+                    row_clr.append((1, 1, 0))       # geel
+                elif base_color == "green":
+                    row_clr.append((0, 1, 0))       # groen
+                else:
+                    row_clr.append((1, 1, 1))       # wit (fallback)
+        cell_text.append(row_txt)
+        cell_colors.append(row_clr)
 
-    df = pd.DataFrame(matrix_data, index=impact_labels, columns=kans_labels)
-    return df
+    table = ax.table(
+        cellText=cell_text,
+        cellColours=cell_colors,
+        rowLabels=risicomatrix.index,
+        colLabels=None,  # Remove default column headers
+        loc='center',
+        cellLoc='center'
+    )
+    
+    # Add x-axis labels at the bottom
+    for j, col_label in enumerate(risicomatrix.columns):
+        ax.text(
+            0.15 + j * 0.15,  # Adjust X position
+            0.05,             # Y position below table
+            col_label,
+            ha='center',
+            va='top',
+            rotation=45,
+            fontsize=11,
+            transform=fig.transFigure
+        )
+        
+    ax.text(0.02, 0.5, 'Effect', rotation='vertical', va='center', transform=fig.transFigure, fontsize=12)
+    ax.text(0.5, 0.01, 'Kans', ha='center', transform=fig.transFigure, fontsize=12)
+    
+    table.set_fontsize(12)
+    table.scale(1,2)
+    ax.axis('off')
+
+    tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+    # plt.savefig(tmpfile.name, bbox_inches='tight', dpi=300)
+    plt.savefig(tmpfile.name, bbox_inches='tight', pad_inches=0.01, dpi=300)
+
+    plt.close(fig)
+    return tmpfile.name
+
+# def maak_dynamische_matrix_afbeelding(matrix: pd.DataFrame) -> str:
+#     def get_num_from_label(lbl):
+#         match = re.search(r"\((\d+)\)", str(lbl))
+#         return int(match.group(1)) if match else None
+
+#     color_map = {
+#         (5,1): "green",  (5,2): "red",    (5,3): "red",    (5,4): "red",    (5,5): "red",
+#         (4,1): "green",  (4,2): "yellow", (4,3): "red",    (4,4): "red",    (4,5): "red",
+#         (3,1): "green",  (3,2): "yellow",(3,3): "yellow", (3,4): "red",    (3,5): "red",
+#         (2,1): "green",  (2,2): "green", (2,3): "yellow", (2,4): "yellow", (2,5): "red",
+#         (1,1): "green",  (1,2): "green", (1,3): "green",  (1,4): "green",  (1,5): "green",
+#     }
+
+#     fig, ax = plt.subplots(figsize=(10, 8))
+#     data = matrix.values[::-1]
+#     row_labels = matrix.index[::-1]
+#     col_labels = matrix.columns
+    
+#     cell_text = []
+#     cell_colors = []
+    
+#     for i, row_label in enumerate(row_labels):
+#         effect_val = get_num_from_label(row_label)
+#         row_texts = []
+#         row_cols = []
+#         for j, col_label in enumerate(col_labels):
+#             chance_val = get_num_from_label(col_label)
+#             val = data[i, j]
+#             row_texts.append(str(val))
+            
+#             if val == 0:
+#                 row_cols.append((0.85, 0.85, 0.85))
+#             else:
+#                 base = color_map.get((effect_val, chance_val), "green")
+#                 if base == "red":
+#                     row_cols.append((1.0, 0.0, 0.0))
+#                 elif base == "yellow":
+#                     row_cols.append((1.0, 1.0, 0.0))
+#                 elif base == "green":
+#                     row_cols.append((0.0, 1.0, 0.0))
+#                 else:
+#                     row_cols.append((1.0, 1.0, 1.0))
+#         cell_text.append(row_texts)
+#         cell_colors.append(row_cols)
+
+#     table = ax.table(
+#         cellText=cell_text,
+#         cellColours=cell_colors,
+#         rowLabels=row_labels,
+#         colLabels=None,
+#         loc='center',
+#         cellLoc='center',
+#         edges='horizontal'  # Show horizontal grid lines
+#     )
+    
+#     # Add rotated x-axis labels at the bottom
+#     for j, col_label in enumerate(col_labels):
+#         ax.text(
+#             0.15 + j * 0.15,   # X-position (adjusted for 5 columns)
+#             0.05,              # Y-position (below table)
+#             col_label,
+#             ha='center',
+#             va='top',
+#             fontsize=11,
+#             rotation=45,
+#             transform=fig.transFigure
+#         )
+    
+#     # Make borders visible
+#     for key, cell in table.get_celld().items():
+#         cell.set_linewidth(0.5)
+#         cell.set_edgecolor('dimgray')
+
+#     # Add axis labels
+#     ax.text(0.02, 0.5, 'Effect', fontsize=12, rotation='vertical', va='center', transform=fig.transFigure)
+#     ax.text(0.4, 0.01, 'Kans', fontsize=12, ha='center', transform=fig.transFigure)
+
+#     ax.axis('off')
+#     table.set_fontsize(11)
+#     table.scale(1, 2)
+
+#     tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+#     plt.savefig(tmpfile.name, bbox_inches='tight', dpi=300)
+#     plt.close(fig)
+#     return tmpfile.name
+
+def maak_dynamische_matrix_afbeelding(matrix: pd.DataFrame) -> str:
+    def get_num_from_label(lbl):
+        match = re.search(r"\((\d+)\)", str(lbl))
+        return int(match.group(1)) if match else None
+
+    color_map = {
+        (5,1): "#00FF00",  # Green
+        (5,2): "#FF0000",  # Red
+        (5,3): "#FF0000",
+        (5,4): "#FF0000",
+        (5,5): "#FF0000",
+        (4,1): "#00FF00",
+        (4,2): "#FFFF00",  # Yellow
+        (4,3): "#FF0000",
+        (4,4): "#FF0000",
+        (4,5): "#FF0000",
+        (3,1): "#00FF00",
+        (3,2): "#FFFF00",
+        (3,3): "#FFFF00",
+        (3,4): "#FF0000",
+        (3,5): "#FF0000",
+        (2,1): "#00FF00",
+        (2,2): "#00FF00",
+        (2,3): "#FFFF00",
+        (2,4): "#FFFF00",
+        (2,5): "#FF0000",
+        (1,1): "#00FF00",
+        (1,2): "#00FF00",
+        (1,3): "#00FF00",
+        (1,4): "#00FF00",
+        (1,5): "#00FF00",
+    }
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    data = matrix.values
+    row_labels = matrix.index
+    col_labels = matrix.columns
+    
+    cell_text = []
+    cell_colors = []
+    
+    for i, row_label in enumerate(row_labels):
+        effect_val = get_num_from_label(row_label)
+        row_texts = []
+        row_cols = []
+        for j, col_label in enumerate(col_labels):
+            chance_val = get_num_from_label(col_label)
+            val = data[i, j]
+            row_texts.append(str(val))
+            
+            if val == 0:
+                # Light gray for zero values
+                row_cols.append("#F0F0F0")
+            else:
+                # Get color from color map using (effect, chance)
+                color = color_map.get((effect_val, chance_val), "#FFFFFF")
+                row_cols.append(color)
+                
+        cell_text.append(row_texts)
+        cell_colors.append(row_cols)
+
+    # Create table with full borders
+    table = ax.table(
+        cellText=cell_text,
+        cellColours=cell_colors,
+        rowLabels=row_labels,
+        colLabels=col_labels,
+        loc='center',
+        cellLoc='center',
+        edges='closed'
+    )
+    
+    # Style cells
+    for key, cell in table.get_celld().items():
+        cell.set_linewidth(0.5)
+        cell.set_edgecolor('#404040')
+        cell.set_text_props(fontsize=11, color='black' if cell.get_facecolor()[0] > 0.8 else 'black')
+
+    # Adjust layout
+    ax.axis('off')
+    plt.subplots_adjust(
+        left=0.15,   # Reduced from default ~0.125
+        right=0.85,  # Reduced from default ~0.9
+        top=0.9,     # Reduced from default ~0.9
+        bottom=0.15  # Reduced from default ~0.1
+    )    
+    plt.tight_layout()
+    
+
+    # Save image
+    tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+    plt.savefig(
+        tmpfile.name, 
+        bbox_inches='tight',
+        pad_inches=0.01,  # Reduced from default 0.1
+        dpi=300
+    )    
+    plt.close(fig)
+    return tmpfile.name
 
 def color_cell(val):
     """
@@ -189,46 +440,6 @@ def color_cell(val):
         return "background-color: gold; color:black;"
     else:
         return "background-color: red; color:white;"
-
-def maak_statische_matrix_afbeelding():
-    """
-    Maakt een PNG van de statische matrix met bijbehorende kleuren (groen/geel/rood).
-    """
-    df = maak_statische_tolerantiematrix()
-    # We gebruiken Seaborn/Matplotlib voor het tekenen, maar met eigen colormap:
-    fig, ax = plt.subplots(figsize=(5,4))
-
-    # Converteer naar numpy
-    data = df.values
-
-    # We maken een custom color-map gebaseerd op je eigen logica
-    # Om het eenvoudig te houden, gebruiken we thresholds in code:
-    def get_color(v):
-        if v <= 4:
-            return (0.0, 1.0, 0.0)   # groen
-        elif v <= 9:
-            return (1.0, 1.0, 0.0)   # geel
-        else:
-            return (1.0, 0.0, 0.0)   # rood
-
-    kleuren = [[get_color(val) for val in row] for row in data]
-
-    # Plot als tabel met ax.table
-    the_table = ax.table(
-        cellText=df.values,
-        rowLabels=df.index,
-        colLabels=df.columns,
-        cellColours=kleuren,
-        loc='center'
-    )
-    the_table.set_fontsize(14)
-    the_table.scale(1, 2)  # iets groter maken
-
-    ax.axis('off')
-    tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-    plt.savefig(tmpfile.name, bbox_inches='tight', dpi=450)
-    plt.close(fig)
-    return tmpfile.name
 
 ################################################################################
 # Bepaal Tolerantie - Risico Analyse (tellingen per categorie)
@@ -282,46 +493,100 @@ def pdf_subkop(pdf, tekst, size=12, bold=True, align='L'):
 def vervang_unicode_apostrof(tekst):
     return tekst.replace("’", "'")
 
+def style_tolerantie_matrix(df):
+    """
+    Kleur de cellen precies zoals in de Tolerantiematrix-screenshot:
+      - (Effect=5, Kans=1) = groen, (Effect=5, Kans=2..5) = rood, etc.
+      - Als de telling in die cel = 0, wordt hij grijs.
+    """
+
+    # Haal de getallen uit "Groot (4)" of "Zeer waarschijnlijk (1)"
+    def get_num_from_label(label):
+        match = re.search(r"\((\d+)\)", str(label))
+        if match:
+            return int(match.group(1))
+        return None
+
+    # We zetten voor alle (Effect,Kans) in één dict welke kleur het moet hebben
+    # (volgens jouw screenshot):
+    color_map = {
+        (5,1): "green",  (5,2): "red",    (5,3): "red",    (5,4): "red",    (5,5): "red",
+        (4,1): "green",  (4,2): "yellow",    (4,3): "red",    (4,4): "red",    (4,5): "red",
+        (3,1): "green",  (3,2): "yellow", (3,3): "yellow", (3,4): "red",    (3,5): "red",
+        (2,1): "green",  (2,2): "green", (2,3): "yellow", (2,4): "yellow", (2,5): "red",
+        (1,1): "green",  (1,2): "green",  (1,3): "green",  (1,4): "green",  (1,5): "green",
+    }
+
+    # Maak een dataframe even groot als df, waar we straks per cel de CSS-style in zetten
+    styled = pd.DataFrame("", index=df.index, columns=df.columns)
+
+    for row_i, row_label in enumerate(df.index):
+        effect_val = get_num_from_label(row_label)  # 5,4,3,2,1
+        for col_j, col_label in enumerate(df.columns):
+            chance_val = get_num_from_label(col_label)  # 1..5
+            count_in_cell = df.iloc[row_i, col_j]
+
+            if count_in_cell == 0:
+                # Als telling = 0 => grijs
+                styled.iloc[row_i, col_j] = "background-color: grey; color: black;"
+            else:
+                # Bepaal de 'basis-kleur' via (Effect,Kans)
+                kleur = color_map.get((effect_val, chance_val), "green")
+                if kleur == "red":
+                    styled.iloc[row_i, col_j] = "background-color: red; color: white;"
+                elif kleur == "yellow":
+                    styled.iloc[row_i, col_j] = "background-color: yellow; color: black;"
+                else:
+                    # green
+                    styled.iloc[row_i, col_j] = "background-color: limegreen; color: black;"
+
+    return styled
+
 class CustomPDF(FPDF):
     pass
 
 def print_table_autofit(pdf, data, col_widths):
-    """
-    Drukt een tabel af in de PDF waarbij iedere rij 'autofit' is.
-    'data' is een lijst van rijen, bv: [["Kenmerk", "Omschrijving", "Score"], ...]
-    'col_widths' is een lijst met kolombreedtes [w1, w2, w3, ...]
-    """
-    line_height = 6  # hoogte van 1 tekstregel
-    
+    line_height = 6
     for row_cells in data:
-        # (1) Bepaal het aantal regels per kolom
+        # (1) Bepaal aantal regels op basis van tekstbreedte
         line_counts = []
         for i, text in enumerate(row_cells):
-            # split_only=True zorgt dat FPDF alleen de regels 'berekent' maar niet print
-            splitted = pdf.multi_cell(col_widths[i], line_height, text, border=0, align='L', split_only=True)
-            line_counts.append(len(splitted))
+            txt = str(text)
+            col_w = col_widths[i]
+            # Schat de ruimte in mm
+            txt_width = pdf.get_string_width(txt)
 
-        # (2) Hoogste aantal regels is de row_height
+            # We trekken er een paar mm af als marge, bv. col_w - 4, omdat er border/padding kan zijn
+            usable_width = max(col_w - 4, 1)
+
+            # Hoeveel regels van line_height hebben we nodig?
+            lines_needed = math.ceil(txt_width / usable_width)
+            line_counts.append(lines_needed if lines_needed > 0 else 1)
+
         max_lines = max(line_counts)
         row_height = max_lines * line_height
-        
-        # (3) Beginposities om straks netjes te tekenen
+
         x_start = pdf.get_x()
         y_start = pdf.get_y()
-        
-        # (4) Nu elke kolom écht printen, met border=1
+
+        # (2) Print elke kolom
         for i, text in enumerate(row_cells):
-            pdf.set_xy(x_start + sum(col_widths[:i]), y_start)
-            pdf.multi_cell(col_widths[i], line_height, text, border=1, align='L')
-        
-        # (5) Cursor onder de rij plaatsen
+            cell_x = pdf.get_x()
+            cell_y = pdf.get_y()
+            pdf.multi_cell(col_widths[i], line_height, str(text), border=1, align='L')
+            # Cursor terugzetten rechts van de kolom
+            pdf.set_xy(cell_x + col_widths[i], cell_y)
+
+        # (3) Naar de volgende rij
         pdf.set_xy(x_start, y_start + row_height)
+
 
 def genereer_pdf(
     top_10_risico, 
     tolerantie_df,
     risicokenmerken_path,
-    top10_kenmerken_path
+    top10_kenmerken_path,
+    risicomatrix  
 ):
     pdf = CustomPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -332,15 +597,15 @@ def genereer_pdf(
     pdf.set_font("Arial", '', 11)
     pdf.multi_cell(0, 6, vervang_unicode_apostrof(
         "Dit rapport geeft inzicht in de belangrijkste risico's, "
-        "de statische tolerantiematrix en de top 10 van grootste risico’s. "
+        "de Dynamische tolerantiematrix en de top 10 van grootste risico’s. "
         "Onderstaande matrix toont de productscore van Kans × Effect."
     ))
     pdf.ln(5)
 
-    pdf_subkop(pdf, "Statische Tolerantiematrix", size=14)
-    static_matrix_img = maak_statische_matrix_afbeelding()
+    pdf_subkop(pdf, "Dynamische Tolerantiematrix", size=14)
+    static_matrix_img = maak_dynamische_matrix_afbeelding(risicomatrix)
     pdf.image(static_matrix_img, x=15, y=pdf.get_y(), w=170)
-    pdf.ln(115)
+    pdf.ln(150)
 
     pdf_subkop(pdf, "Tolerantie - Risico Analyse", size=14)
     pdf.set_font("Arial", '', 10)
@@ -394,7 +659,7 @@ def voeg_matrix_toe(schrijver, df):
     wb = schrijver.book
     ws = wb.add_worksheet('Risicomatrix')
     
-    ws.write(0, 0, "Dynamische Risicomatrix (optioneel)")
+    ws.write(0, 0, "Dynamische Risicomatrix")
     for j, col in enumerate(df.columns, start=1):
         ws.write(1, j, col)
 
@@ -511,33 +776,42 @@ def hoofd():
                 
                 # ----------------------------------------------------------
                 # Vervang 2 kolommen door 3 kolommen
-                kol_links, kol_mid, kol_rechts = st.columns(3)
+                kol_links, kol_rechts = st.columns(2)
                 # ----------------------------------------------------------
 
-                # ---- Links: Dynamische risicomatrix ----
+                # ---- Links: Dynamische risicomatrix ----                    
+                # with kol_links:
+
+                #     st.write("**Dynamische Risicomatrix**")
+                #     risicomatrix = maak_risicomatrix(getransformeerde_df)
+                #     dyn_img_path = maak_dynamische_matrix_afbeelding(risicomatrix)
+                    
+                #     # Add a container with constrained height
+                #     # with st.container(height=400):  # Adjust height as needed
+                #     st.image(dyn_img_path, use_container_width=True)
                 with kol_links:
                     st.write("**Dynamische Risicomatrix**")
                     risicomatrix = maak_risicomatrix(getransformeerde_df)
-                    fig, ax = plt.subplots(figsize=(8, 6))
-                    sns.heatmap(
-                        risicomatrix.astype(int), 
-                        annot=True, 
-                        fmt="d",
-                        cmap="RdYlGn_r",
-                        linewidths=.5,
-                        linecolor='black',
-                        cbar=False,
-                        ax=ax
+                    dyn_img_path = maak_dynamische_matrix_afbeelding(risicomatrix)
+                    
+                    # Read image as bytes and encode properly
+                    with open(dyn_img_path, "rb") as img_file:
+                        img_bytes = img_file.read()
+                        encoded_img = base64.b64encode(img_bytes).decode('latin-1')  # Encode bytes to base64 bytes, then decode to string
+                    
+                    # Display with centered HTML
+                    st.markdown(
+                        f'<div style="display: flex; justify-content: center;">'
+                        f'<img src="data:image/png;base64,{encoded_img}" style="width: 70%;">'
+                        f'</div>',
+                        unsafe_allow_html=True
                     )
-                    ax.set_xlabel("Effect", fontsize=12)
-                    ax.set_ylabel("Kans", fontsize=12)
-                    st.pyplot(fig)
                     
                     # Tolerantie
                     st.write("**Tolerantie - Risico Analyse**")
                     werkelijke_waarden = maak_risico_categorieen(getransformeerde_df)
                     df_risicomatrix = pd.DataFrame({
-                        "Risc SC": ["Safe", "Low", "Medium", "High"],
+                        "Risc SC": ["Veilig", "Laag", "Medium", "Hoog"],
                         "Risc Level SC": ["0 > 5", "6", "7 > 9", "10 > 25"],
                         "Aantal": [
                             werkelijke_waarden.get('Laag', 0), 
@@ -547,13 +821,9 @@ def hoofd():
                         ]
                     })
                     st.dataframe(df_risicomatrix, hide_index=True)
-
-                # ---- Midden: Statische risicomatrix (zoals in PDF) ----
-                with kol_mid:
-                    st.write("**Statische Risicomatrix**")
-                    # maak een PNG van de statische matrix
-                    static_matrix_path = maak_statische_matrix_afbeelding()
-                    st.image(static_matrix_path, use_container_width ='always')
+                    # st.dataframe(
+                    #     risicomatrix.style.apply(style_tolerantie_matrix, axis=None)
+                    # )
 
                 # ---- Rechts: Risicokenmerken (Som) ----
                 with kol_rechts:
@@ -678,14 +948,13 @@ def hoofd():
                     fig_top10.savefig(tmp_top10_kenmerken.name, bbox_inches='tight')
                     plt.close(fig_top10)
 
-                pdf_bytes = None
-                if not top_10_risico.empty:
-                    pdf_bytes = genereer_pdf(
-                        top_10_risico=top_10_risico,
-                        tolerantie_df=df_risicomatrix,
-                        risicokenmerken_path=tmp_kenmerken_som.name,
-                        top10_kenmerken_path=tmp_top10_kenmerken.name if tmp_top10_kenmerken else None
-                    )
+                pdf_bytes = genereer_pdf(
+                    top_10_risico=top_10_risico,
+                    tolerantie_df=df_risicomatrix,
+                    risicokenmerken_path=tmp_kenmerken_som.name,
+                    top10_kenmerken_path=tmp_top10_kenmerken.name if tmp_top10_kenmerken else None,
+                    risicomatrix=risicomatrix  # Pass the DataFrame instead of the image path
+                )
                 
                 if pdf_bytes:
                     st.download_button(
