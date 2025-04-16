@@ -177,7 +177,7 @@ def maak_dynamische_matrix_kleur(risicomatrix: pd.DataFrame) -> str:
         (1,1): "green",  (1,2): "green", (1,3): "green",  (1,4): "green",  (1,5): "green",
     }
 
-    fig, ax = plt.subplots(figsize=(6,4))
+    fig, ax = plt.subplots(figsize=(10,8))
     cell_text = []
     cell_colors = []
     for row_label in risicomatrix.index:
@@ -241,92 +241,6 @@ def maak_dynamische_matrix_kleur(risicomatrix: pd.DataFrame) -> str:
     plt.close(fig)
     return tmpfile.name
 
-# def maak_dynamische_matrix_afbeelding(matrix: pd.DataFrame) -> str:
-#     def get_num_from_label(lbl):
-#         match = re.search(r"\((\d+)\)", str(lbl))
-#         return int(match.group(1)) if match else None
-
-#     color_map = {
-#         (5,1): "green",  (5,2): "red",    (5,3): "red",    (5,4): "red",    (5,5): "red",
-#         (4,1): "green",  (4,2): "yellow", (4,3): "red",    (4,4): "red",    (4,5): "red",
-#         (3,1): "green",  (3,2): "yellow",(3,3): "yellow", (3,4): "red",    (3,5): "red",
-#         (2,1): "green",  (2,2): "green", (2,3): "yellow", (2,4): "yellow", (2,5): "red",
-#         (1,1): "green",  (1,2): "green", (1,3): "green",  (1,4): "green",  (1,5): "green",
-#     }
-
-#     fig, ax = plt.subplots(figsize=(10, 8))
-#     data = matrix.values[::-1]
-#     row_labels = matrix.index[::-1]
-#     col_labels = matrix.columns
-    
-#     cell_text = []
-#     cell_colors = []
-    
-#     for i, row_label in enumerate(row_labels):
-#         effect_val = get_num_from_label(row_label)
-#         row_texts = []
-#         row_cols = []
-#         for j, col_label in enumerate(col_labels):
-#             chance_val = get_num_from_label(col_label)
-#             val = data[i, j]
-#             row_texts.append(str(val))
-            
-#             if val == 0:
-#                 row_cols.append((0.85, 0.85, 0.85))
-#             else:
-#                 base = color_map.get((effect_val, chance_val), "green")
-#                 if base == "red":
-#                     row_cols.append((1.0, 0.0, 0.0))
-#                 elif base == "yellow":
-#                     row_cols.append((1.0, 1.0, 0.0))
-#                 elif base == "green":
-#                     row_cols.append((0.0, 1.0, 0.0))
-#                 else:
-#                     row_cols.append((1.0, 1.0, 1.0))
-#         cell_text.append(row_texts)
-#         cell_colors.append(row_cols)
-
-#     table = ax.table(
-#         cellText=cell_text,
-#         cellColours=cell_colors,
-#         rowLabels=row_labels,
-#         colLabels=None,
-#         loc='center',
-#         cellLoc='center',
-#         edges='horizontal'  # Show horizontal grid lines
-#     )
-    
-#     # Add rotated x-axis labels at the bottom
-#     for j, col_label in enumerate(col_labels):
-#         ax.text(
-#             0.15 + j * 0.15,   # X-position (adjusted for 5 columns)
-#             0.05,              # Y-position (below table)
-#             col_label,
-#             ha='center',
-#             va='top',
-#             fontsize=11,
-#             rotation=45,
-#             transform=fig.transFigure
-#         )
-    
-#     # Make borders visible
-#     for key, cell in table.get_celld().items():
-#         cell.set_linewidth(0.5)
-#         cell.set_edgecolor('dimgray')
-
-#     # Add axis labels
-#     ax.text(0.02, 0.5, 'Effect', fontsize=12, rotation='vertical', va='center', transform=fig.transFigure)
-#     ax.text(0.4, 0.01, 'Kans', fontsize=12, ha='center', transform=fig.transFigure)
-
-#     ax.axis('off')
-#     table.set_fontsize(11)
-#     table.scale(1, 2)
-
-#     tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-#     plt.savefig(tmpfile.name, bbox_inches='tight', dpi=300)
-#     plt.close(fig)
-#     return tmpfile.name
-
 def maak_dynamische_matrix_afbeelding(matrix: pd.DataFrame) -> str:
     def get_num_from_label(lbl):
         match = re.search(r"\((\d+)\)", str(lbl))
@@ -360,10 +274,11 @@ def maak_dynamische_matrix_afbeelding(matrix: pd.DataFrame) -> str:
         (1,5): "#00FF00",
     }
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(16, 10))  # Increased from (8,6)
     data = matrix.values
-    row_labels = matrix.index
-    col_labels = matrix.columns
+    # Explicitly convert categorical index/columns to strings
+    row_labels = [str(label) for label in matrix.index.tolist()]  # Convert to strings
+    col_labels = [str(label) for label in matrix.columns.tolist()]  # Convert to strings
     
     cell_text = []
     cell_colors = []
@@ -396,27 +311,65 @@ def maak_dynamische_matrix_afbeelding(matrix: pd.DataFrame) -> str:
         colLabels=col_labels,
         loc='center',
         cellLoc='center',
-        edges='closed'
+        edges='closed',
+        colWidths=[0.15]*5
     )
-    
-    # Style cells
-    for key, cell in table.get_celld().items():
-        cell.set_linewidth(0.5)
-        cell.set_edgecolor('#404040')
-        cell.set_text_props(fontsize=11, color='black' if cell.get_facecolor()[0] > 0.8 else 'black')
 
+    
+    # Style cells with larger fonts
+    for key, cell in table.get_celld().items():
+        cell.set_linewidth(1)
+        cell.set_edgecolor('#404040')
+        cell.set_text_props(
+            fontsize=16,  # Increased from 11
+            color='black' if cell.get_facecolor()[0] > 0.8 else 'black',
+            weight='bold'
+        )
+        
     # Adjust layout
     ax.axis('off')
     plt.tight_layout()
-    plt.subplots_adjust(left=0.15, right=0.95, top=0.85, bottom=0.15)
+    # Adjust layout for better spacing
+    plt.subplots_adjust(
+        left=0.2,
+        right=0.8,
+        top=0.9,
+        bottom=0.2,
+        wspace=0.4,
+        hspace=0.4
+    )
     
+        # Add and style axis labels
+    ax.text(0.02, 0.5, 'Effect', rotation='vertical', va='center', 
+            transform=fig.transFigure, fontsize=18, weight='bold')  # Increased from 12
+    ax.text(0.5, 0.01, 'Kans', ha='center', 
+            transform=fig.transFigure, fontsize=18, weight='bold')  # Increased from 12
 
-    # Save image
+    # Style column headers
+    for j, col_label in enumerate(col_labels):
+        ax.text(
+            0.2 + j * 0.15,
+            0.1,
+            col_label,
+            ha='center',
+            va='top',
+            rotation=45,
+            fontsize=14,  # Increased from 11
+            weight='bold',
+            transform=fig.transFigure
+        )
+
+    for (r, c), cell in table.get_celld().items():
+        # c == -1 -> dit is de cell met row label 
+        if c == -1 and r >= 0:
+            cell.set_text_props(fontsize=14, weight='bold')
+
+    # Save with higher resolution
     tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
     plt.savefig(
         tmpfile.name, 
         bbox_inches='tight',
-        pad_inches=0.05,  # Reduced from default 0.1
+        pad_inches=0.2,  # Increased padding
         dpi=300
     )    
     plt.close(fig)
@@ -581,7 +534,8 @@ def genereer_pdf(
     tolerantie_df,
     risicokenmerken_path,
     top10_kenmerken_path,
-    risicomatrix  
+    risicomatrix,
+    gefilterde_risicos  
 ):
     pdf = CustomPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -601,6 +555,31 @@ def genereer_pdf(
     static_matrix_img = maak_dynamische_matrix_afbeelding(risicomatrix)
     pdf.image(static_matrix_img, x=15, y=pdf.get_y(), w=170)
     pdf.ln(150)
+    
+    # New Page for Filtered Risks
+    pdf.add_page()
+    pdf_subkop(pdf, "Gefilterde Risico's", size=14)
+    if not gefilterde_risicos.empty:
+        # Select relevant columns and clean data
+        cols_to_show = ['kenmerken', 'Kenmerken van het bouwwerk', 'Kans', 'Effect', 'Risico']
+        filtered_display = gefilterde_risicos[cols_to_show].copy()
+        filtered_display['Kans'] = filtered_display['Kans'].apply(extraheer_nummer)
+        filtered_display['Effect'] = filtered_display['Effect'].apply(extraheer_nummer)
+        
+        # Prepare table data
+        headers = filtered_display.columns.tolist()
+        table_data = [headers]
+        for _, row in filtered_display.iterrows():
+            table_data.append(row.tolist())
+        
+        # Define column widths (adjust based on content)
+        col_widths = [40, 80, 20, 20, 20]
+        pdf.set_font("Arial", size=10)
+        print_table_autofit(pdf, table_data, col_widths)
+    else:
+        pdf.cell(0, 10, "Geen risico's gevonden met de huidige filters.", ln=True)
+
+    
 
     pdf_subkop(pdf, "Tolerantie - Risico Analyse", size=14)
     pdf.set_font("Arial", '', 10)
@@ -643,8 +622,15 @@ def genereer_pdf(
     pdf_subkop(pdf, "Visualisatie: Risicokenmerken Top 10", size=14)
     if top10_kenmerken_path:
         pdf.image(top10_kenmerken_path, x=15, y=pdf.get_y(), w=180)
-
-    return pdf.output(dest='S').encode('latin-1')
+    
+    
+    pdf_result = pdf.output(dest="S")
+    pdf_bytes = bytes(pdf_result)
+    
+    # return pdf.output(dest='S').encode('latin-1')
+    return pdf_bytes
+    
+    # return pdf.output(dest='S')  # <== Verwijder .encode('latin-1')
 
 
 ################################################################################
@@ -776,17 +762,16 @@ def hoofd():
 
                 # ---- Links: Dynamische risicomatrix ----                    
                 with kol_links:
-
                     st.write("**Dynamische Risicomatrix**")
                     risicomatrix = maak_risicomatrix(getransformeerde_df)
-                    dyn_img_path = maak_dynamische_matrix_afbeelding(risicomatrix)
                     
-                    # Add a container with constrained height
-                    # with st.container(height=400):  # Adjust height as needed
-                    st.image(dyn_img_path, use_container_width=True)
-
+                    # Display as styled dataframe instead of image
+                    st.dataframe(
+                        risicomatrix.style.apply(style_tolerantie_matrix, axis=None),
+                        height=(len(risicomatrix) + 1) * 35 + 3  # Adjust height dynamically
+                    )
                     
-                    # Tolerantie
+                    # Tolerantie analysis (keep this part unchanged)
                     st.write("**Tolerantie - Risico Analyse**")
                     werkelijke_waarden = maak_risico_categorieen(getransformeerde_df)
                     df_risicomatrix = pd.DataFrame({
@@ -800,9 +785,6 @@ def hoofd():
                         ]
                     })
                     st.dataframe(df_risicomatrix, hide_index=True)
-                    # st.dataframe(
-                    #     risicomatrix.style.apply(style_tolerantie_matrix, axis=None)
-                    # )
 
                 # ---- Rechts: Risicokenmerken (Som) ----
                 with kol_rechts:
@@ -926,22 +908,23 @@ def hoofd():
                     tmp_top10_kenmerken = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
                     fig_top10.savefig(tmp_top10_kenmerken.name, bbox_inches='tight')
                     plt.close(fig_top10)
+                    
 
                 pdf_bytes = genereer_pdf(
                     top_10_risico=top_10_risico,
                     tolerantie_df=df_risicomatrix,
                     risicokenmerken_path=tmp_kenmerken_som.name,
                     top10_kenmerken_path=tmp_top10_kenmerken.name if tmp_top10_kenmerken else None,
-                    risicomatrix=risicomatrix  # Pass the DataFrame instead of the image path
+                    risicomatrix=risicomatrix,
+                    gefilterde_risicos=gefilterde_risicos
                 )
-                
                 if pdf_bytes:
                     st.download_button(
                         "📄 Download PDF-rapport",
                         data=pdf_bytes,
                         file_name="Risicoanalyse.pdf",
                         mime="application/pdf"
-                    )
+                    )   
                 else:
                     st.info("Geen top 10 risico's om in het PDF-rapport te zetten.")
 
