@@ -490,7 +490,7 @@ def genereer_pdf(
         pdf.image(top10_kenmerken_path, x=15, y=pdf.get_y(), w=180)
     
     pdf_result = pdf.output(dest="S")
-    pdf_bytes = bytes(pdf_result)
+    pdf_bytes = pdf_result.encode("latin-1")
     
     return pdf_bytes
 
