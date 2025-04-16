@@ -368,7 +368,8 @@ def print_table_autofit(pdf, data, col_widths):
     header = data[0]
     pdf.set_font("Arial", 'B', font_size)
     for i, header_cell in enumerate(header):
-        pdf.multi_cell(col_widths[i], line_height, str(header_cell), border=1, align='C', ln=3, max_line_height=pdf.font_size)
+        # pdf.multi_cell(col_widths[i], line_height, str(header_cell), border=1, align='C', ln=3, max_line_height=pdf.font_size)
+        pdf.multi_cell(col_widths[i], line_height, str(header_cell), border=1, align='C')
         x = pdf.get_x()
         y = pdf.get_y()
         pdf.set_xy(x + col_widths[i], y - line_height)
@@ -471,7 +472,7 @@ def genereer_pdf(
 
         # Titel
         pdf.set_font("Arial", 'B', 11)
-        pdf.multi_cell(col_widths[i], line_height, str(header_cell), border=1, align='C', ln=3, max_line_height=pdf.font_size)
+        pdf.multi_cell(0, 6, f"- {kenmerk}")
 
         # Omschrijving
         pdf.set_font("Arial", '', 10)
