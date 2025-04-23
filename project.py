@@ -694,7 +694,7 @@ def hoofd():
                 
                 # zip bestand alles download
                 st.download_button(
-                    label="📥 Download Volledig Rapport (Excel)",
+                    label="📥 Download Excel-rapport",
                     data=uitvoer.getvalue(),
                     file_name="risico_analyse.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
