@@ -14,6 +14,8 @@ import math
 import matplotlib.colors as mcolors
 from matplotlib.colors import ListedColormap
 import zipfile
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
 ################################################################################
 # Streamlit Config en Kleuren
@@ -162,15 +164,13 @@ def maak_dynamische_matrix_afbeelding(matrix: pd.DataFrame) -> str:
     Bouwt en slaat een risicomatrix op waarbij de celkleuren correct worden weergegeven in PDF.
     Gebruikt puur matplotlib in plaats van seaborn.
     """
-    import matplotlib.pyplot as plt
-    import matplotlib.colors as mcolors
-    import numpy as np
-    import tempfile
 
     def get_num_from_label(label):
         match = re.search(r"\((\d+)\)", str(label))
         return int(match.group(1)) if match else 0
 
+    #rooster met kleuren van de cellen in de matrix 
+    #5x5 matrix met kans en effect
     color_map = {
         (5,1): "red",  (5,2): "red",    (5,3): "red",    (5,4): "red",    (5,5): "red",
         (4,1): "green",  (4,2): "yellow", (4,3): "red",    (4,4): "red",    (4,5): "red",
@@ -286,7 +286,7 @@ def pdf_tussenlijn(pdf, extra_space=4):
     pdf.set_line_width(0.2)
     pdf.set_draw_color(150, 150, 150)
     x_start = 10
-    x_end = 200  # past bij A4 marges van FPDF
+    x_end = 200
     y = pdf.get_y()
     pdf.line(x_start, y, x_end, y)
     pdf.ln(extra_space)
@@ -368,7 +368,6 @@ def print_table_autofit(pdf, data, col_widths):
     header = data[0]
     pdf.set_font("Arial", 'B', font_size)
     for i, header_cell in enumerate(header):
-        # pdf.multi_cell(col_widths[i], line_height, str(header_cell), border=1, align='C', ln=3, max_line_height=pdf.font_size)
         pdf.multi_cell(col_widths[i], line_height, str(header_cell), border=1, align='C')
         x = pdf.get_x()
         y = pdf.get_y()
@@ -378,7 +377,6 @@ def print_table_autofit(pdf, data, col_widths):
     pdf.set_font("Arial", '', font_size)
 
     for row in data[1:]:
-        # Bepaal het maximale aantal regels nodig in deze rij
         line_counts = []
         for i, cell in enumerate(row):
             text_width = pdf.get_string_width(str(cell))
@@ -406,10 +404,8 @@ def genereer_pdf(
     risicokenmerken_path,
     top10_kenmerken_path,
     risicomatrix,
-    matrix_afbeelding_path
-):
-    # Hieronder kun je de oriëntering op Landscape zetten als je wilt:
-    # pdf = CustomPDF('L', 'mm', 'A4')
+    matrix_afbeelding_path):
+
     pdf = CustomPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
 
@@ -439,8 +435,7 @@ def genereer_pdf(
 
     pdf_subkop(pdf, "Dynamische Tolerantiematrix", size=14)
     static_matrix_img = maak_dynamische_matrix_afbeelding(risicomatrix)
-    pdf.image(matrix_afbeelding_path, x=10, y=pdf.get_y(), w=190)  # Gebruik externe afbeelding
-    # Vergroot de width (w=190) zodat hij bijna de hele A4-breedte vult
+    pdf.image(matrix_afbeelding_path, x=10, y=pdf.get_y(), w=190) 
     pdf.image(static_matrix_img, x=10, y=pdf.get_y(), w=190)
     pdf.ln(150)  # Extra ruimte na de matrix
     pdf_subkop(pdf, "Tolerantie - Risico Analyse", size=14)
@@ -448,20 +443,24 @@ def genereer_pdf(
     col_widths = [40, 40, 40]
     headers = tolerantie_df.columns.tolist()
     pdf.set_fill_color(200, 220, 255)
+
     # Tabelkop
     for i, head in enumerate(headers):
         pdf.cell(col_widths[i], 7, head, border=1, align='C', fill=True)
     pdf.ln()
+
     # Tabel-rijen
     for _, row in tolerantie_df.iterrows():
         pdf.cell(col_widths[0], 7, str(row[headers[0]]), border=1, align='C')
         pdf.cell(col_widths[1], 7, str(row[headers[1]]), border=1, align='C')
         pdf.cell(col_widths[2], 7, str(row[headers[2]]), border=1, align='C')
         pdf.ln()
+
     # PAGINA 2
     pdf.add_page()
     pdf_subkop(pdf, "Risicokenmerken (Som)", size=14)
     pdf.image(risicokenmerken_path, x=15, y=pdf.get_y(), w=180)
+
     # PAGINA 3
     pdf.add_page()
     pdf_subkop(pdf, "Top 10 Hoogste Risico's", size=14)
@@ -496,8 +495,6 @@ def genereer_pdf(
     
     return pdf_bytes
 
-
-
 ################################################################################
 # Excel Helpers
 ################################################################################
@@ -512,8 +509,10 @@ def voeg_matrix_toe(schrijver, df):
         for j, col_name in enumerate(df.columns, start=1):
             val = df.loc[row_name, col_name]
             ws.write(i, j, val)
+
 def voeg_tolerantie_toe(schrijver, df_tolerantie):
     df_tolerantie.to_excel(schrijver, sheet_name="Tolerantie Analyse", index=False)
+
 def voeg_top10_toe(schrijver, top_10):
     wb = schrijver.book
     ws = wb.add_worksheet("Hoogste Risicos")
@@ -527,6 +526,7 @@ def voeg_top10_toe(schrijver, top_10):
     })
     diagram.set_title({'name': 'Top 10 Hoogste Risicos'})
     ws.insert_chart('F2', diagram)
+
 def voeg_staafdiagram_toe(schrijver, df):
     """
     Zet in 'Risicokenmerken' sheet de som van Risico per groep + bar chart
@@ -547,6 +547,7 @@ def voeg_staafdiagram_toe(schrijver, df):
     })
     diagram.set_title({'name': 'Meest Risicovolle Kenmerken'})
     ws.insert_chart('F2', diagram)
+
 ################################################################################
 # Hoofdfunctie (Streamlit)
 ################################################################################
@@ -571,7 +572,9 @@ def hoofd():
                 # Data voor staafdiagram (som per groep, etc.)
                 getransformeerde_df['Groep'] = getransformeerde_df['kenmerken'].str.split(' - ').str[0]
                 gegroepeerde_risicos = getransformeerde_df.groupby('Groep')['Risico'].sum().reset_index()
+
                 kol1, kol2, kol3 = st.columns(3)
+
                 with kol1:
                     risico_drempel = st.select_slider(
                         "Toon risico's met een score boven:",
@@ -579,9 +582,11 @@ def hoofd():
                         value=0
                     )
                 options = ['Alle groepen'] + list(getransformeerde_df['Groep'].unique())
+
                 with kol2:
                     selected_group = st.selectbox("Kies de Groep", options=options)
                 options_kenmerken = ['Alle kenmerken'] + list(getransformeerde_df['kenmerken'].unique())
+
                 with kol3:
                     selected_kenmerken = st.selectbox("Kies de kenmerken", options=options_kenmerken)
                 df_filtered = getransformeerde_df.copy()
@@ -593,7 +598,9 @@ def hoofd():
                 st.write(f"**Risico’s boven drempel ({risico_drempel})**")
                 st.dataframe(gefilterde_risicos, hide_index=True)
                 st.subheader("Risicoanalyse")
+
                 kol_links, kol_rechts = st.columns(2)
+
                 with kol_links:
                     st.write("**Dynamische Risicomatrix**")
                     risicomatrix = maak_risicomatrix(getransformeerde_df)
@@ -614,6 +621,7 @@ def hoofd():
                         ]
                     })
                     st.dataframe(df_risicomatrix, hide_index=True)
+
                 with kol_rechts:
                     st.write("**Risicokenmerken**")
                     if not gegroepeerde_risicos.empty:
@@ -634,7 +642,9 @@ def hoofd():
                         st.pyplot(fig2)
                     else:
                         st.info("Geen risico's gevonden")
+
                 kol1_top10, kol2_top10 = st.columns(2)
+
                 with kol1_top10:
                     st.write("**Top 10 Hoogste Risico's**")
                     if len(getransformeerde_df) >= 10:
@@ -651,6 +661,7 @@ def hoofd():
                     else:
                         top_10_risico = pd.DataFrame()
                         st.info("Niet genoeg gegevens om de top 10 te bepalen.")
+
                 with kol2_top10:
                     st.write("**Risicokenmerken top 10**")
                     if not top_10_risico.empty:
@@ -670,6 +681,7 @@ def hoofd():
                         st.pyplot(fig3)
                     else:
                         st.info("Geen risico's gevonden.")
+                
                 # === Excel-Export ===
                 uitvoer = BytesIO()
                 with pd.ExcelWriter(uitvoer, engine="xlsxwriter") as schrijver:
@@ -679,6 +691,7 @@ def hoofd():
                     voeg_tolerantie_toe(schrijver, df_risicomatrix)
                     if not top_10_risico.empty:
                         voeg_top10_toe(schrijver, top_10_risico)
+                
                 # zip bestand alles download
                 st.download_button(
                     label="📥 Download Volledig Rapport (Excel)",
@@ -686,6 +699,7 @@ def hoofd():
                     file_name="risico_analyse.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
+                
                 # === PDF-Export ===
                 fig2_pdf, ax2_pdf = plt.subplots(figsize=(8,6))
                 gegroepeerde_som = getransformeerde_df.groupby('Groep', as_index=False)['Risico'].sum()
@@ -727,8 +741,7 @@ def hoofd():
                     risicokenmerken_path=tmp_kenmerken_som.name,
                     top10_kenmerken_path=tmp_top10_kenmerken.name if tmp_top10_kenmerken else None,
                     risicomatrix=risicomatrix,
-                    matrix_afbeelding_path=static_matrix_img  # << nieuwe argument
-
+                    matrix_afbeelding_path=static_matrix_img
                 )
                 if pdf_bytes:
                     st.download_button(
@@ -739,6 +752,7 @@ def hoofd():
                     )   
                 else:
                     st.info("Geen top 10 risico's om in het PDF-rapport te zetten.")
+                
                 # === ZIP Export: PDF, Excel en grafieken ===
                 with tempfile.TemporaryDirectory() as tempdir:
                     # Sla Excel-bestand tijdelijk op
@@ -750,14 +764,13 @@ def hoofd():
                     pdf_pad = os.path.join(tempdir, "Risicoanalyse.pdf")
                     with open(pdf_pad, "wb") as f:
                         f.write(pdf_bytes)
-
-                    # Kopieer matrixafbeelding en kenmerken-som afbeelding naar dir
+                    # Sla de afbeeldingen op
                     matrix_pad = os.path.join(tempdir, "matrix.png")
                     os.replace(static_matrix_img, matrix_pad)
-
+                    # Sla de risicokenmerken afbeelding op
                     kenmerken_som_pad = os.path.join(tempdir, "kenmerken_som.png")
                     os.replace(tmp_kenmerken_som.name, kenmerken_som_pad)
-
+                    # Sla de top 10 afbeelding op
                     top10_risico_pad = None
                     if tmp_top10_kenmerken:
                         top10_risico_pad = os.path.join(tempdir, "top10_risico.png")
@@ -773,7 +786,7 @@ def hoofd():
                         if top10_risico_pad:
                             zipf.write(top10_risico_pad, "top10_risico.png")
 
-                    # Bied ZIP aan als download
+                    # ZIP donwload button
                     with open(zip_pad, "rb") as f:
                         st.download_button(
                             "🗂️ Download Alles (ZIP)",
@@ -783,7 +796,6 @@ def hoofd():
                         )
             else:
                 st.error("Startrij niet gevonden in het document (kan 'Omgevingskenmerken - Algemeen' niet vinden).")
-                
         except Exception as e:
             st.error(f"Fout opgetreden: {str(e)}")
 if __name__ == "__main__":
