@@ -13,6 +13,7 @@ from xlsxwriter.utility import xl_rowcol_to_cell
 import math
 import matplotlib.colors as mcolors
 from matplotlib.colors import ListedColormap
+import zipfile
 
 ################################################################################
 # Streamlit Config en Kleuren
@@ -404,7 +405,8 @@ def genereer_pdf(
     tolerantie_df,
     risicokenmerken_path,
     top10_kenmerken_path,
-    risicomatrix
+    risicomatrix,
+    matrix_afbeelding_path
 ):
     # Hieronder kun je de oriëntering op Landscape zetten als je wilt:
     # pdf = CustomPDF('L', 'mm', 'A4')
@@ -437,6 +439,7 @@ def genereer_pdf(
 
     pdf_subkop(pdf, "Dynamische Tolerantiematrix", size=14)
     static_matrix_img = maak_dynamische_matrix_afbeelding(risicomatrix)
+    pdf.image(matrix_afbeelding_path, x=10, y=pdf.get_y(), w=190)  # Gebruik externe afbeelding
     # Vergroot de width (w=190) zodat hij bijna de hele A4-breedte vult
     pdf.image(static_matrix_img, x=10, y=pdf.get_y(), w=190)
     pdf.ln(150)  # Extra ruimte na de matrix
@@ -492,6 +495,7 @@ def genereer_pdf(
     pdf_bytes = pdf_result.encode("latin-1")
     
     return pdf_bytes
+
 
 
 ################################################################################
@@ -716,12 +720,15 @@ def hoofd():
                     tmp_top10_kenmerken = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
                     fig_top10.savefig(tmp_top10_kenmerken.name, bbox_inches='tight')
                     plt.close(fig_top10)
+                static_matrix_img = maak_dynamische_matrix_afbeelding(risicomatrix)
                 pdf_bytes = genereer_pdf(
                     top_10_risico=top_10_risico,
                     tolerantie_df=df_risicomatrix,
                     risicokenmerken_path=tmp_kenmerken_som.name,
                     top10_kenmerken_path=tmp_top10_kenmerken.name if tmp_top10_kenmerken else None,
-                    risicomatrix=risicomatrix
+                    risicomatrix=risicomatrix,
+                    matrix_afbeelding_path=static_matrix_img  # << nieuwe argument
+
                 )
                 if pdf_bytes:
                     st.download_button(
@@ -732,6 +739,48 @@ def hoofd():
                     )   
                 else:
                     st.info("Geen top 10 risico's om in het PDF-rapport te zetten.")
+                # === ZIP Export: PDF, Excel en grafieken ===
+                with tempfile.TemporaryDirectory() as tempdir:
+                    # Sla Excel-bestand tijdelijk op
+                    excel_pad = os.path.join(tempdir, "risico_analyse.xlsx")
+                    with open(excel_pad, "wb") as f:
+                        f.write(uitvoer.getvalue())
+
+                    # Sla PDF op
+                    pdf_pad = os.path.join(tempdir, "Risicoanalyse.pdf")
+                    with open(pdf_pad, "wb") as f:
+                        f.write(pdf_bytes)
+
+                    # Kopieer matrixafbeelding en kenmerken-som afbeelding naar dir
+                    matrix_pad = os.path.join(tempdir, "matrix.png")
+                    os.replace(static_matrix_img, matrix_pad)
+
+                    kenmerken_som_pad = os.path.join(tempdir, "kenmerken_som.png")
+                    os.replace(tmp_kenmerken_som.name, kenmerken_som_pad)
+
+                    top10_risico_pad = None
+                    if tmp_top10_kenmerken:
+                        top10_risico_pad = os.path.join(tempdir, "top10_risico.png")
+                        os.replace(tmp_top10_kenmerken.name, top10_risico_pad)
+
+                    # Maak ZIP
+                    zip_pad = os.path.join(tempdir, "volledig_risico_rapport.zip")
+                    with zipfile.ZipFile(zip_pad, "w") as zipf:
+                        zipf.write(excel_pad, "risico_analyse.xlsx")
+                        zipf.write(pdf_pad, "Risicoanalyse.pdf")
+                        zipf.write(matrix_pad, "matrix.png")
+                        zipf.write(kenmerken_som_pad, "kenmerken_som.png")
+                        if top10_risico_pad:
+                            zipf.write(top10_risico_pad, "top10_risico.png")
+
+                    # Bied ZIP aan als download
+                    with open(zip_pad, "rb") as f:
+                        st.download_button(
+                            "🗂️ Download Alles (ZIP)",
+                            data=f.read(),
+                            file_name="volledig_risico_rapport.zip",
+                            mime="application/zip"
+                        )
             else:
                 st.error("Startrij niet gevonden in het document (kan 'Omgevingskenmerken - Algemeen' niet vinden).")
                 
