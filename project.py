@@ -118,6 +118,8 @@ def extraheer_nummer(waarde):
             return int(match.group()) if match else 0
     return 0
 
+
+# maak de eerste rij rood bij zeer grood als het voorkomt
 ################################################################################
 # Dynamische (optionele) risicomatrix
 ################################################################################
@@ -132,11 +134,11 @@ def maak_risicomatrix(df):
     ]
     
     x_labels = [
-        'Zeer waarschijnlijk (1)',
-        'Waarschijnlijk (2)',
+        'Zeer onwaarschijnlijk (1)',
+        'Onwaarschijnlijk (2)',
         'Mogelijk (3)',
-        'Onwaarschijnlijk (4)',
-        'Zeer onwaarschijnlijk (5)'
+        'Waarschijnlijk (4)',
+        'Zeer waarschijnlijk (5)'
     ]
 
     matrix = pd.DataFrame(
@@ -169,7 +171,7 @@ def maak_dynamische_matrix_afbeelding(matrix: pd.DataFrame) -> str:
         return int(match.group(1)) if match else 0
 
     color_map = {
-        (5,1): "green",  (5,2): "red",    (5,3): "red",    (5,4): "red",    (5,5): "red",
+        (5,1): "red",  (5,2): "red",    (5,3): "red",    (5,4): "red",    (5,5): "red",
         (4,1): "green",  (4,2): "yellow", (4,3): "red",    (4,4): "red",    (4,5): "red",
         (3,1): "green",  (3,2): "yellow", (3,3): "yellow", (3,4): "red",    (3,5): "red",
         (2,1): "green",  (2,2): "green",  (2,3): "yellow", (2,4): "yellow", (2,5): "red",
@@ -190,14 +192,12 @@ def maak_dynamische_matrix_afbeelding(matrix: pd.DataFrame) -> str:
                 colors[i, j] = color_map.get((effect_val, chance_val), "white")
 
     fig, ax = plt.subplots(figsize=(12, 8))
-
     for i in range(n_rows):
         for j in range(n_cols):
             rect = plt.Rectangle((j, i), 1, 1, facecolor=colors[i, j], edgecolor='black')
             ax.add_patch(rect)
             text = str(matrix.iloc[i, j])
             ax.text(j + 0.5, i + 0.5, text, ha='center', va='center', fontsize=14, fontweight='bold')
-
     ax.set_xlim(0, n_cols)
     ax.set_ylim(0, n_rows)
     ax.set_xticks(np.arange(n_cols) + 0.5)
@@ -232,7 +232,7 @@ def color_cell(val):
     else:
         return "background-color: red; color:white;"
 
-
+# alleen de dingen aantonen die aanwezig zijn, gebaseerd op risisco matrix
 ################################################################################
 # Bepaal Tolerantie - Risico Analyse (tellingen per categorie)
 ################################################################################
@@ -245,6 +245,35 @@ def maak_risico_categorieen(df):
     df['Categorie'] = pd.cut(df['Risico'], bins=bins, labels=labels, right=False)
     return df['Categorie'].value_counts().reindex(labels, fill_value=0)
 
+def maak_risico_categorieen_van_matrix(matrix):
+    """
+    Berekent risicocategorieën gebaseerd op de risicomatrix.
+    """
+    categorie_counts = {
+        'Laag': 0,
+        'Midden': 0,
+        'Hoog': 0,
+        'Zeer hoog': 0
+    }
+    
+    for row_label in matrix.index:
+        effect = extraheer_nummer(row_label)
+        for col_label in matrix.columns:
+            kans = extraheer_nummer(col_label)
+            count = matrix.loc[row_label, col_label]
+            if count == 0:
+                continue
+            risico = kans * effect
+            if risico < 5:
+                categorie = 'Laag'
+            elif 5 <= risico < 10:
+                categorie = 'Midden'
+            elif 10 <= risico < 20:
+                categorie = 'Hoog'
+            else:
+                categorie = 'Zeer hoog'
+            categorie_counts[categorie] += count
+    return pd.Series(categorie_counts)
 
 ################################################################################
 # PDF Generator
@@ -328,36 +357,6 @@ def style_tolerantie_matrix(df):
 
 class CustomPDF(FPDF):
     pass
-
-# def print_table_autofit(pdf, data, col_widths):
-#     line_height = 6
-#     for row_cells in data:
-#         # (1) Bepaal aantal regels op basis van tekstbreedte
-#         line_counts = []
-#         for i, text in enumerate(row_cells):
-#             txt = str(text)
-#             col_w = col_widths[i]
-#             txt_width = pdf.get_string_width(txt)
-#             usable_width = max(col_w - 4, 1)
-#             lines_needed = math.ceil(txt_width / usable_width)
-#             line_counts.append(lines_needed if lines_needed > 0 else 1)
-
-#         max_lines = max(line_counts)
-#         row_height = max_lines * line_height
-
-#         x_start = pdf.get_x()
-#         y_start = pdf.get_y()
-
-#         # (2) Print elke kolom
-#         for i, text in enumerate(row_cells):
-#             cell_x = pdf.get_x()
-#             cell_y = pdf.get_y()
-#             pdf.multi_cell(col_widths[i], line_height, str(text), border=1, align='L')
-#             pdf.set_xy(cell_x + col_widths[i], cell_y)
-
-#         # (3) Naar de volgende rij
-#         pdf.set_xy(x_start, y_start + row_height)
-
 
 def print_table_autofit(pdf, data, col_widths):
     line_height = 5  # Iets compacter
@@ -599,7 +598,7 @@ def hoofd():
                         height=(len(risicomatrix) + 1) * 35 + 3
                     )
                     st.write("**Tolerantie - Risico Analyse**")
-                    werkelijke_waarden = maak_risico_categorieen(getransformeerde_df)
+                    werkelijke_waarden = maak_risico_categorieen_van_matrix(risicomatrix)
                     df_risicomatrix = pd.DataFrame({
                         "Risc SC": ["Veilig", "Laag", "Medium", "Hoog"],
                         "Risc Level SC": ["0 > 5", "6", "7 > 9", "10 > 25"],
@@ -676,7 +675,7 @@ def hoofd():
                     voeg_tolerantie_toe(schrijver, df_risicomatrix)
                     if not top_10_risico.empty:
                         voeg_top10_toe(schrijver, top_10_risico)
-                    
+                # zip bestand alles download
                 st.download_button(
                     label="📥 Download Volledig Rapport (Excel)",
                     data=uitvoer.getvalue(),
@@ -717,7 +716,6 @@ def hoofd():
                     tmp_top10_kenmerken = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
                     fig_top10.savefig(tmp_top10_kenmerken.name, bbox_inches='tight')
                     plt.close(fig_top10)
-                    
                 pdf_bytes = genereer_pdf(
                     top_10_risico=top_10_risico,
                     tolerantie_df=df_risicomatrix,
